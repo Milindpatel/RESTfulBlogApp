@@ -1,62 +1,87 @@
-    var express = require("express"),
-        app = express(),
-        bodyParser = require("body-parser"),
-        mongoose = require("mongoose");
-    
-    //APP CONFIG    
-    mongoose.connect('mongodb://localhost:27017/restful_blog_app', { useNewUrlParser: true });
-    app.set("view engine", "ejs");
-    app.use(express.static("public"));
-    app.use(bodyParser.urlencoded({extended: true}));
-    
-    //MONGOOSE /MODEL CONFIG
-    var blogSchema = new mongoose.Schema({
-        title: String,
-        image: String,
-        body: String,
-        created: {type: Date, default: Date.now}
-    });
-    
-    //RESTFUL ROUTES
-    
-    app.get("/", function(req,res){
-        res.redirect("/blogs");
-    })
-    
-    //INDEX ROUTE
-    app.get("/blogs", function(req, res){
-        Blog.find({}, function(err, blogs){
-            if(err){
-                console.log("ERROR!");
-            }else{
-                res.render("index", {blogs: blogs});
-            }
-        })
-    })
-    
-    //NEW ROUTE
-    app.get("/blogs/new", function(req, res){
-        res.render("new");
-    });
-    
-    //CREATE ROUTE
-    app.post("/blogs", function(req, res){
-        //create blog
-        Blog.create(req.body.blog, function(err, newBlog){
-            if(err){
-                res.render("new");
-            }else{
-                //then, redirect to index
-                res.redirect("/blogs");
-            }
-        })
-    })
-    
-    var Blog = mongoose.model("Blog", blogSchema);
-    
-   
-    
-    app.listen(process.env.PORT, process.env.IP, function(){
-        console.log("SERVER IS RUNNING");
-    });
-    
+const path = require('node:path');
+const express = require('express');
+const methodOverride = require('method-override');
+const mongoose = require('mongoose');
+const Blog = require('./models/blog');
+
+function formData(body) {
+  const blog = (body && body.blog) || {};
+  return Object.fromEntries(Blog.fields.filter((k) => typeof blog[k] === 'string').map((k) => [k, blog[k]]));
+}
+
+async function findBlog(req, res, next) {
+  const blog = mongoose.isValidObjectId(req.params.id) ? await Blog.findById(req.params.id) : null;
+  if (!blog) return next('route');
+  res.locals.blog = blog;
+  return next();
+}
+
+/** Builds the app with the seven RESTful routes for /blogs. */
+function createApp() {
+  const app = express();
+  app.disable('x-powered-by');
+  app.set('view engine', 'ejs');
+  app.set('views', path.join(__dirname, 'views'));
+  app.use(express.static(path.join(__dirname, 'public')));
+  app.use(express.urlencoded({ extended: true }));
+  app.use(methodOverride('_method'));
+
+  app.get('/', (req, res) => res.redirect('/blogs'));
+
+  // INDEX
+  app.get('/blogs', async (req, res) => {
+    const blogs = await Blog.find({}).sort({ created: -1 });
+    res.render('blogs/index', { blogs });
+  });
+
+  // NEW
+  app.get('/blogs/new', (req, res) => res.render('blogs/new', { blog: {}, error: null }));
+
+  // CREATE
+  app.post('/blogs', async (req, res) => {
+    const data = formData(req.body);
+    try {
+      const blog = await Blog.create(data);
+      return res.redirect(`/blogs/${blog._id}`);
+    } catch (err) {
+      if (!(err instanceof mongoose.Error.ValidationError)) throw err;
+      return res.status(400).render('blogs/new', { blog: data, error: err.message });
+    }
+  });
+
+  // SHOW
+  app.get('/blogs/:id', findBlog, (req, res) => res.render('blogs/show'));
+
+  // EDIT
+  app.get('/blogs/:id/edit', findBlog, (req, res) => res.render('blogs/edit', { error: null }));
+
+  // UPDATE
+  app.put('/blogs/:id', findBlog, async (req, res) => {
+    const blog = res.locals.blog;
+    blog.set(formData(req.body));
+    try {
+      await blog.save();
+      return res.redirect(`/blogs/${blog._id}`);
+    } catch (err) {
+      if (!(err instanceof mongoose.Error.ValidationError)) throw err;
+      return res.status(400).render('blogs/edit', { error: err.message });
+    }
+  });
+
+  // DESTROY
+  app.delete('/blogs/:id', findBlog, async (req, res) => {
+    await res.locals.blog.deleteOne();
+    res.redirect('/blogs');
+  });
+
+  app.use((req, res) => res.status(404).render('error', { message: 'Page not found' }));
+  // eslint-disable-next-line no-unused-vars
+  app.use((err, req, res, next) => {
+    console.error(err);
+    res.status(500).render('error', { message: 'Something went wrong' });
+  });
+
+  return app;
+}
+
+module.exports = { createApp };

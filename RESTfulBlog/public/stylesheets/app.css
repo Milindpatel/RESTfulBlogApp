@@ -5,3 +5,11 @@ i.icon{
 .container.main{
     margin-top: 7.0em;
 }
+.post-body {
+    white-space: pre-line;
+    margin: 1em 0;
+}
+
+.inline-form {
+    display: inline;
+}

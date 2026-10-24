@@ -1,0 +1,15 @@
+<% if (error) { %>
+    <div class="ui negative message" role="alert"><%= error %></div>
+<% } %>
+<div class="field">
+    <label for="title">Title</label>
+    <input id="title" type="text" name="blog[title]" value="<%= blog.title || '' %>" required maxlength="200">
+</div>
+<div class="field">
+    <label for="image">Image URL</label>
+    <input id="image" type="url" name="blog[image]" value="<%= blog.image || '' %>" placeholder="https://...">
+</div>
+<div class="field">
+    <label for="body">Blog content</label>
+    <textarea id="body" name="blog[body]" required><%= blog.body || '' %></textarea>
+</div>
